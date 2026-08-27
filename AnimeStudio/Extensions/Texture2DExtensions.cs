@@ -38,12 +38,25 @@ namespace AnimeStudio
         public static SKBitmap ConvertToImage(this Texture2D m_Texture2D, bool flip)
         {
             var converter = new Texture2DConverter(m_Texture2D);
-            byte[] buff = ArrayPool<byte>.Shared.Rent(m_Texture2D.m_Width * m_Texture2D.m_Height * 4);
+            byte[] buff = ArrayPool<byte>.Shared.Rent(converter.OutputDataSize);
             try
             {
                 if (converter.DecodeTexture2D(buff))
                 {
-                    var image = ImageExtensions.CreateBitmapFromBgra(buff, m_Texture2D.m_Width, m_Texture2D.m_Height);
+                    SKBitmap image;
+                    if (converter.UsesSwitchSwizzle)
+                    {
+                        var uncroppedSize = converter.GetUncroppedSize();
+                        using (var paddedImage = ImageExtensions.CreateBitmapFromBgra(buff, uncroppedSize.Width, uncroppedSize.Height))
+                        {
+                            image = paddedImage.Crop(new SKRectI(0, 0, m_Texture2D.m_Width, m_Texture2D.m_Height));
+                        }
+                    }
+                    else
+                    {
+                        image = ImageExtensions.CreateBitmapFromBgra(buff, m_Texture2D.m_Width, m_Texture2D.m_Height);
+                    }
+
                     if (flip)
                     {
                         var flippedImage = image.FlipVertical();
