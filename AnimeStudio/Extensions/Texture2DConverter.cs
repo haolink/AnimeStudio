@@ -46,6 +46,13 @@ namespace AnimeStudio
                 m_Width = m_WidthCrop;
                 m_Height = m_HeightCrop;
             }
+
+            // Much like Switch - on PS5 handle RGB24 as if it was RGBA32
+            if (platform == BuildTarget.PS5 && m_TextureFormat == TextureFormat.RGB24 && reader.Size >= m_Width * m_Height * 4) 
+            {
+                m_TextureFormat = TextureFormat.RGBA32;
+            }
+
             outPutSize = m_Width * m_Height * 4;
         }
 
@@ -80,11 +87,31 @@ namespace AnimeStudio
             {
                 return false;
             }
+
             var flag = false;
             var buff = ArrayPool<byte>.Shared.Rent(reader.Size);
             try
             {
                 reader.GetData(buff);
+
+                // PS5 deswizzling
+                if (platform == BuildTarget.PS5 && Texture2DPS5Deswizzler.TryGetBytesPerElement(m_TextureFormat, out var ps5BytesPerElement))
+                {
+                    var deswizzledData = ArrayPool<byte>.Shared.Rent(reader.Size);
+                    try
+                    {
+                        Texture2DPS5Deswizzler.Unswizzle(buff.AsSpan(0, reader.Size), m_Width, m_Height, ps5BytesPerElement, deswizzledData.AsSpan(0, reader.Size));
+                        ArrayPool<byte>.Shared.Return(buff, true);
+                        buff = deswizzledData;
+                    }
+                    catch (Exception e)
+                    {
+                        ArrayPool<byte>.Shared.Return(deswizzledData, true);
+                        Logger.Error(e.Message, e);
+                    }
+                }
+
+                // Switch deswizzling
                 if (switchSwizzled)
                 {
                     var unswizzledData = ArrayPool<byte>.Shared.Rent(reader.Size);
